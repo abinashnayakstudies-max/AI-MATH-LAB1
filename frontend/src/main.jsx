@@ -10,7 +10,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import "@designcodeio/threeui/style.css";
 import "./style.css";
 
-const API = "http://127.0.0.1:8000";
+const API = "https://ai-math-lab1.onrender.com";
 
 function MVTScene({ result }) {
   const mountRef = useRef(null);
