@@ -120,6 +120,25 @@ def health():
         "model_available": MODEL_AVAILABLE
     }
 
+
+class FunctionValueRequest(BaseModel):
+    expression: str = Field(..., min_length=1)
+    x: float
+
+
+@app.post("/function-value")
+def function_value(req: FunctionValueRequest):
+    try:
+        expression_string = req.expression.replace("^", "**")
+        expr = sp.sympify(expression_string)
+        f = sp.lambdify(x, expr, "numpy")
+        value = float(f(req.x))
+        if not np.isfinite(value):
+            return {"error": "Function is not finite at this x value."}
+        return {"expression": str(expr), "x": req.x, "value": value}
+    except Exception as e:
+        return {"error": f"Could not evaluate function: {e}"}
+
 @app.post("/mvt")
 def calculate_mvt(req: MVTRequest):
     if req.a >= req.b:
