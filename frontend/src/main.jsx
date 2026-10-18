@@ -7,8 +7,11 @@ import "./style.css";
 
 const API = "https://ai-math-lab1.onrender.com";
 
-function MVTScene({ result, inspectX, inspectValue }) {
+function MVTScene({ result, inspectX, inspectValue, onInspectPoint }) {
   const mountRef = useRef(null);
+  const onInspectPointRef = useRef(onInspectPoint);
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+  useEffect(() => { onInspectPointRef.current = onInspectPoint; }, [onInspectPoint]);
   const plot = useMemo(() => {
     if (!result?.plot_points?.length) return null;
     const pts = result.plot_points.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
@@ -50,6 +53,7 @@ function MVTScene({ result, inspectX, inspectValue }) {
 
     const group = new THREE.Group();
     scene.add(group);
+    let curveLine = null;
     const addLine = (points, color, opacity = 1) => {
       if (points.length < 2) return null;
       const geometry = new THREE.BufferGeometry().setFromPoints(points);
@@ -116,9 +120,9 @@ function MVTScene({ result, inspectX, inspectValue }) {
     arrow(new THREE.Vector3(worldW/2 - 0.4, y0, 0), new THREE.Vector3(1,0,0), 0.42, xAxisColor);
     arrow(new THREE.Vector3(x0, worldH/2 - 0.4, 0), new THREE.Vector3(0,1,0), 0.42, yAxisColor);
     arrow(new THREE.Vector3(x0, y0, 2.0), new THREE.Vector3(0,0,1), 0.38, zAxisColor);
-    addText('X · input x', new THREE.Vector3(worldW/2 - 0.35, y0 - 0.38, 0.08), '#8cc9f4', 0.28);
-    addText('Y · f(x)', new THREE.Vector3(x0 + 0.65, worldH/2 - 0.12, 0.08), '#9ce0bb', 0.28);
-    addText('Z · depth', new THREE.Vector3(x0 + 0.75, y0 + 0.32, 2.2), '#e6c981', 0.25);
+    addText('X · input x', new THREE.Vector3(worldW/2 - 0.35, y0 - 0.40, 0.08), '#8cc9f4', 0.34);
+    addText('Y · f(x)', new THREE.Vector3(x0 + 0.70, worldH/2 - 0.12, 0.08), '#9ce0bb', 0.34);
+    addText('Z · depth only', new THREE.Vector3(x0 + 0.85, y0 + 0.38, 2.2), '#e6c981', 0.30);
 
     // Tick labels use real input/function values, not arbitrary scene coordinates.
     const tickCount = 5;
@@ -126,10 +130,10 @@ function MVTScene({ result, inspectX, inspectValue }) {
       const t = i / tickCount;
       const xv = xMin + t * xRange, xp = mapX(xv);
       addLine([new THREE.Vector3(xp, y0 - 0.07, 0.02), new THREE.Vector3(xp, y0 + 0.07, 0.02)], xAxisColor, 0.9);
-      addText(fmt(xv), new THREE.Vector3(xp, y0 - 0.25, 0.04), '#9bb0c4', 0.22);
+      addText(fmt(xv), new THREE.Vector3(xp, y0 - 0.28, 0.04), '#c0d0df', 0.29);
       const yv = yMin + t * yRange, yp = mapY(yv);
       addLine([new THREE.Vector3(x0 - 0.07, yp, 0.02), new THREE.Vector3(x0 + 0.07, yp, 0.02)], yAxisColor, 0.9);
-      if (i !== Math.round(tickCount / 2)) addText(fmt(yv), new THREE.Vector3(x0 - 0.5, yp, 0.04), '#9bb0c4', 0.22);
+      if (i !== Math.round(tickCount / 2)) addText(fmt(yv), new THREE.Vector3(x0 - 0.58, yp, 0.04), '#c0d0df', 0.29);
     }
 
     // Mark the true origin when it falls within the displayed coordinate range.
@@ -139,7 +143,7 @@ function MVTScene({ result, inspectX, inspectValue }) {
 
     if (plot) {
       const valid = plot.pts.filter(p => Number.isFinite(p.y));
-      addLine(valid.map(p => new THREE.Vector3(mapX(p.x), mapY(p.y), 0.12)), 0x73b8e6, 1);
+      curveLine = addLine(valid.map(p => new THREE.Vector3(mapX(p.x), mapY(p.y), 0.12)), 0x73b8e6, 1);
       const nearest = target => plot.pts.reduce((best, p) => Math.abs(p.x - target) < Math.abs(best.x - target) ? p : best, plot.pts[0]);
       const pa = nearest(result.a), pb = nearest(result.b);
       addLine([new THREE.Vector3(mapX(result.a), mapY(pa.y), 0.16), new THREE.Vector3(mapX(result.b), mapY(pb.y), 0.16)], 0xd7a85e, 1);
@@ -154,8 +158,26 @@ function MVTScene({ result, inspectX, inspectValue }) {
       const point = new THREE.Mesh(new THREE.SphereGeometry(0.105, 24, 24), new THREE.MeshStandardMaterial({ color: 0x9ed2ff, emissive: 0x245e83, emissiveIntensity: 1.1 }));
       point.position.set(mapX(c), mapY(pc.y), 0.24); group.add(point);
       addLine([new THREE.Vector3(mapX(c), y0, 0.18), new THREE.Vector3(mapX(c), mapY(pc.y), 0.18)], 0x9ed2ff, 0.65);
-      addText(`MVT c=${fmt(c)}`, new THREE.Vector3(mapX(c), mapY(pc.y) + 0.32, 0.28), '#b9e2ff', 0.25);
-      addText(`f(c)=${fmt(pc.y)}`, new THREE.Vector3(mapX(c), mapY(pc.y) + 0.05, 0.28), '#b9e2ff', 0.21);
+      addText(`Verified c=${fmt(c)}`, new THREE.Vector3(mapX(c), mapY(pc.y) + 0.32, 0.28), '#b9e2ff', 0.27);
+      addText(`f(c)≈${fmt(pc.y)}`, new THREE.Vector3(mapX(c), mapY(pc.y) + 0.04, 0.28), '#b9e2ff', 0.23);
+
+      // Mark every detected numerical MVT solution. The verified point above stays prominent.
+      (result.mvt_points || []).forEach(root => {
+        if (Math.abs(root - c) < 1e-5) return;
+        const rp = nearest(root);
+        const marker = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 16), new THREE.MeshBasicMaterial({ color: 0xa6d8f5 }));
+        marker.position.set(mapX(root), mapY(rp.y), 0.23);
+        group.add(marker);
+      });
+
+      // AI output is shown separately from the verified solution.
+      if (Number.isFinite(result.ml_c)) {
+        const mp = nearest(result.ml_c);
+        const aiMarker = new THREE.Mesh(new THREE.SphereGeometry(0.095, 18, 18), new THREE.MeshBasicMaterial({ color: 0xf0c56e }));
+        aiMarker.position.set(mapX(result.ml_c), mapY(mp.y), 0.27);
+        group.add(aiMarker);
+        addText(`AI c=${fmt(result.ml_c)}`, new THREE.Vector3(mapX(result.ml_c), mapY(mp.y) + 0.32, 0.3), '#f0d28a', 0.24);
+      }
 
       if (inspectX != null && inspectValue != null && Number.isFinite(inspectX) && Number.isFinite(inspectValue)) {
         const ip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 20, 20), new THREE.MeshStandardMaterial({ color: 0xe0c77c, emissive: 0x806b26, emissiveIntensity: 0.7 }));
@@ -170,6 +192,44 @@ function MVTScene({ result, inspectX, inspectValue }) {
     }
 
     scene.add(new THREE.AmbientLight(0xb7d7ee, 1.1));
+
+    // Hover over the function curve to read real sampled coordinates; click to pin a point.
+    const raycaster = new THREE.Raycaster();
+    raycaster.params.Line.threshold = 0.16;
+    const pointer = new THREE.Vector2();
+    const onPointerMove = event => {
+      if (!curveLine || !plot) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hit = raycaster.intersectObject(curveLine, false)[0];
+      if (!hit || hit.index == null) {
+        setHoveredPoint(null); renderer.domElement.style.cursor = 'grab'; return;
+      }
+      const pts = plot.pts.filter(p => Number.isFinite(p.y));
+      const idx = Math.max(0, Math.min(pts.length - 1, hit.index));
+      const sample = pts[idx];
+      setHoveredPoint(sample);
+      renderer.domElement.style.cursor = 'crosshair';
+    };
+    const onPointerLeave = () => { setHoveredPoint(null); renderer.domElement.style.cursor = 'grab'; };
+    const onPointerClick = event => {
+      if (!curveLine || !plot) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hit = raycaster.intersectObject(curveLine, false)[0];
+      if (!hit || hit.index == null) return;
+      const pts = plot.pts.filter(p => Number.isFinite(p.y));
+      const sample = pts[Math.max(0, Math.min(pts.length - 1, hit.index))];
+      if (sample) onInspectPointRef.current?.(sample.x, sample.y);
+    };
+    renderer.domElement.style.cursor = 'grab';
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerleave', onPointerLeave);
+    renderer.domElement.addEventListener('click', onPointerClick);
     const resize = () => {
       const w = mount.clientWidth, h = Math.max(mount.clientHeight, 1);
       camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h);
@@ -179,7 +239,7 @@ function MVTScene({ result, inspectX, inspectValue }) {
     const animate = () => { frame = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); };
     animate();
     return () => {
-      cancelAnimationFrame(frame); window.removeEventListener('resize', resize); controls.dispose(); renderer.dispose();
+      cancelAnimationFrame(frame); window.removeEventListener('resize', resize); renderer.domElement.removeEventListener('pointermove', onPointerMove); renderer.domElement.removeEventListener('pointerleave', onPointerLeave); renderer.domElement.removeEventListener('click', onPointerClick); controls.dispose(); renderer.dispose();
       scene.traverse(obj => {
         if (obj.geometry) obj.geometry.dispose();
         if (obj.material) (Array.isArray(obj.material) ? obj.material : [obj.material]).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
@@ -194,9 +254,10 @@ function MVTScene({ result, inspectX, inspectValue }) {
       <span><i className="axis-x"/>X = input x</span><span><i className="axis-y"/>Y = f(x)</span><span><i className="axis-z"/>Z = depth only</span>
     </div>
     <div className="scene-labels">
-      <span><i className="line-key curve-key" />f(x)</span><span><i className="line-key secant-key" />secant</span><span><i className="line-key tangent-key" />tangent</span><span><i className="point-key" />verified c</span>
-      {inspectX != null && <span><i className="inspect-key" />f(x) point</span>}
+      <span><i className="line-key curve-key" />f(x)</span><span><i className="line-key secant-key" />secant</span><span><i className="line-key tangent-key" />tangent</span><span><i className="point-key" />verified MVT</span><span><i className="ai-key" />AI estimate</span>
+      {inspectX != null && <span><i className="inspect-key" />pinned point</span>}
     </div>
+    {hoveredPoint && <div className="coordinate-readout"><span>CURVE COORDINATE · HOVER / CLICK</span><strong>({Number(hoveredPoint.x).toFixed(5)}, {Number(hoveredPoint.y).toFixed(5)})</strong><small>Click the curve to pin this point below.</small></div>}
     {!result && <div className="scene-empty"><Crosshair size={18}/><span>Run an MVT calculation to populate the plot.</span></div>}
   </div>;
 }
@@ -235,6 +296,8 @@ function App() {
   const hybrid = result?.hybrid_c;
   const predictionError = numerical != null && ml != null ? Math.abs(ml - numerical) : null;
 
+  const pinPoint = (x, value) => { setValueX(String(x)); setValueResult({ x, value }); };
+
   const reset = () => { setExpression("x^2"); setA("-2"); setB("3"); setResult(null); setValueResult(null); };
 
   return <main className="app">
@@ -263,7 +326,7 @@ function App() {
 
       <section className="visual-panel panel">
         <div className="plot-header"><div><span>02 / VISUALIZATION</span><h2>Function, secant & MVT point</h2></div><span className="drag-note">Drag to rotate · scroll to zoom</span></div>
-        <MVTScene result={result} inspectX={valueResult?.x} inspectValue={valueResult?.value}/>
+        <MVTScene result={result} inspectX={valueResult?.x} inspectValue={valueResult?.value} onInspectPoint={pinPoint}/>
         <div className="plot-foot"><span>z = 0 plane · interactive Three.js scene</span><span>{result ? `${result.mvt_points?.length ?? 0} numerical solution(s) detected` : "Awaiting calculation"}</span></div>
       </section>
 
@@ -276,13 +339,17 @@ function App() {
           <div className="result-row"><span>AI prediction error</span><b>{predictionError?.toFixed(6) ?? "—"}</b></div>
           <div className="result-row"><span>Secant slope</span><b>{result.secant_slope?.toFixed(6)}</b></div>
           <div className="result-row"><span>Hybrid residual</span><b>{result.hybrid_residual?.toExponential(2) ?? "—"}</b></div>
-          <div className="detected"><span>DETECTED MVT POINTS</span><div>{result.mvt_points.map((c,i)=><code key={i}>{c.toFixed(5)}</code>)}</div></div>
+          <div className="detected"><span>DETECTED MVT POINTS · COORDINATES</span><div className="coordinate-list">{result.mvt_points.map((c,i)=>{
+            const pts = result.plot_points || [];
+            const p = pts.reduce((best, point) => Math.abs(point.x-c) < Math.abs(best.x-c) ? point : best, pts[0] || {x:c,y:NaN});
+            return <button type="button" key={i} title="Click to pin this MVT point" onClick={()=>pinPoint(c,p.y)}><b>c = {c.toFixed(5)}</b><span>f(c) ≈ {Number.isFinite(p.y) ? p.y.toFixed(5) : "—"}</span></button>;
+          })}</div></div>
         </>}
       </aside>
     </section>
 
     <section className="finder panel">
-      <div className="finder-copy"><span>04 / FUNCTION VALUE FINDER</span><h2>Evaluate any point on the curve</h2><p>Enter x to calculate f(x) and mark the coordinate directly in the visualization.</p></div>
+      <div className="finder-copy"><span>04 / FUNCTION VALUE FINDER</span><h2>Evaluate any point on the curve</h2><p>Enter x to evaluate f(x), or click the curve to pin a sampled coordinate.</p></div>
       <div className="finder-form"><label>x</label><input value={valueX} onChange={e=>setValueX(e.target.value)} /><button className="secondary-button" onClick={findValue} disabled={valueLoading}>{valueLoading ? "Evaluating…" : "Evaluate f(x)"}</button></div>
       <div className="finder-result">{valueResult?.error ? <span className="error-inline">{valueResult.error}</span> : valueResult ? <><span>COORDINATE</span><strong>({Number(valueResult.x).toFixed(5)}, {Number(valueResult.value).toFixed(5)})</strong></> : <span className="muted">No point selected.</span>}</div>
     </section>
